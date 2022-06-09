@@ -1,0 +1,164 @@
+﻿@page "/sinhvien"
+@using System.Data
+@using System.IO
+@using Microsoft.Extensions.Logging
+@using NPOI.XSSF.UserModel
+@using NPOI.SS.UserModel
+@using System.Text.Json
+@using DoAnCuoiky.Client.Services.ExcelServices
+@using System.Net.Http.Headers
+@using System.Linq
+@using Newtonsoft.Json;
+@using DoAnCuoiky.Client.Pages.Componants;
+@inject HttpClient _Http
+@inject ISinhvienService _sinhvienCDService
+@inject IExcelService ExcelServices
+@inject NavigationManager NavigationManager
+<PageTitle>Sinh vien CD15</PageTitle>
+<h3>Sinh vien CD15</h3>  
+<button class="btn btn-primary" @onclick="CreateAndEditSinhvien">Add sinh vien</button>
+
+<p>
+    <button onclick="document.getElementById('import').click()">Import</button>
+    <InputFile id="import" OnChange="@ImportExcelFile" hidden mutiple></InputFile>
+</p>
+<input type="text" placeholder="Nhập tên" @bind-value="searchTerm"/><button type="submit" @onclick="(()=>SearchTerm())">Search</button>
+<table class="table">
+    <thead>
+        <tr>
+            <th>Id</th>
+            <th>Tên</th>
+            <th>MSSV</th>
+            <th>Giới tính</th>
+            <th>Email</th>
+            <th>Ngày sinh</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach(var student in sinhviens)
+        {
+            <tr>
+                <td>@student.Id</td>
+                <td>@student.Name</td>
+                <td>@student.MSSV</td>
+                <td>@student.Gender</td> 
+                <td>@student.Email</td>
+                <td>@student.Birthday</td>
+                
+                <td>
+                    <button class="btn btn-primary" @onclick="(() => ShowSinhvien(student.Id))"><i class="oi oi-pencil"></i></button>
+                </td>
+            </tr>
+        }
+        @foreach(DataRow row in dataTable.Rows)
+            {
+                <tr>
+                    @foreach(DataColumn col in dataTable.Columns)
+                        {
+                            <td>@row[col.ColumnName].ToString()</td>                            
+                        }                        
+                </tr>
+            }
+    </tbody>
+</table>
+<tfoot>
+        <Pagination TotalPages="@(totalPages != 0 ? totalPages : 1)"
+                    PageIndex="@pageIndex"
+                    Radius="3"
+                    OnSelectedPage="@SelectedPage">
+        </Pagination>
+    </tfoot>
+@code {
+
+    DataTable dataTable = new DataTable();
+    HttpClient client = new HttpClient();
+    SinhvienModel objStudent = new SinhvienModel();
+    
+    private IEnumerable<SinhvienModel> sinhviens = Enumerable.Empty<SinhvienModel>();
+    private string searchTerm;
+    private int pageIndex = 1;
+    private int itemsPerPage = 10;
+    private int totalPages = 1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await _sinhvienCDService.GetSinhvienDetail();
+
+        if(_sinhvienCDService.Sinhvienservices != null)
+        {
+            totalPages = (int)(_sinhvienCDService.Sinhvienservices.Count() / itemsPerPage);
+            sinhviens = _sinhvienCDService.Sinhvienservices.Skip(0).Take(itemsPerPage);
+        }
+    }
+    void CreateAndEditSinhvien()
+    {
+        NavigationManager.NavigateTo("/sinhviendetail");
+    }
+    void ShowSinhvien(int id)
+    {
+        NavigationManager.NavigateTo($"sinhviendetail/{id}");
+    }
+    async void SearchTerm()
+    {
+        await _sinhvienCDService.SearchSinhvien(searchTerm);
+        if(_sinhvienCDService.Sinhvienservices != null)
+        {
+            totalPages = (int)(_sinhvienCDService.Sinhvienservices.Count() / itemsPerPage);
+            sinhviens = _sinhvienCDService.Sinhvienservices.Skip(0).Take(itemsPerPage);
+        }
+    }
+    private void SelectedPage(int selectedPageIndex)
+    {
+        if (_sinhvienCDService.Sinhvienservices != null)
+        {
+            pageIndex = selectedPageIndex;
+            var skipCount = itemsPerPage * (pageIndex - 1);
+            sinhviens = _sinhvienCDService.Sinhvienservices.Skip(skipCount).Take(itemsPerPage);
+        }
+    }
+    async Task ImportExcelFile(InputFileChangeEventArgs e)
+    {
+        var filestream = e.File.OpenReadStream();
+        var ms = new MemoryStream();
+        await filestream.CopyToAsync(ms);
+        filestream.Close();
+        ms.Position = 0;
+        ISheet sheet;
+        var xsswb = new XSSFWorkbook(ms);
+
+        sheet = xsswb.GetSheetAt(0);
+        IRow hr = sheet.GetRow(0);
+        var rl = new List<string>();
+        int cc = hr.LastCellNum;
+
+        for(var j = 0; j < cc; j++)
+        {
+            ICell cell = hr.GetCell(j);
+            dataTable.Columns.Add(cell.ToString());
+        }
+        for (var j = (sheet.FirstRowNum + 1); j <= sheet.LastRowNum; j++)
+        {
+            var r = sheet.GetRow(j);
+            for(var i=r.FirstCellNum; i<cc; i++)
+            {
+                rl.Add(r.GetCell(i).ToString());
+            }
+            if(rl.Count() > 0)
+            {
+                dataTable.Rows.Add(rl.ToArray());
+
+                objStudent.Name = Convert.ToString(rl[1]);
+                objStudent.MSSV = Convert.ToInt32(rl[2]);  
+                objStudent.Gender = Convert.ToString(rl[3]);  
+                objStudent.Email = Convert.ToString(rl[4]);  
+                objStudent.Birthday = Convert.ToDateTime(rl[5]);  
+
+                await ExcelServices.CreateExcelDetail(objStudent);
+            }
+            rl.Clear();
+        }
+        NavigationManager.NavigateTo("/sinhvien");
+
+    }
+    
+}
