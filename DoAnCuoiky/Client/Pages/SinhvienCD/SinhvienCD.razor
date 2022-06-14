@@ -24,7 +24,7 @@
 </p>
 
 
-<input type="text" placeholder="Nhập tên" @bind-value="searchTerm"/><button type="submit" @onclick="(()=>SearchTerm())">Search</button>
+<input type="text"  placeholder="Nhập tên" @bind-value="searchTerm" @onkeypress="KeySearch">
 
 
 <table class="table">
@@ -113,6 +113,13 @@
             sinhviens = _sinhvienCDService.Sinhvienservices.Skip(0).Take(itemsPerPage);
         }
     }
+        async void KeySearch(KeyboardEventArgs ev)
+    {
+        if (ev.Key == "Enter")
+        {
+            SearchTerm();
+        }
+    }
     private void SelectedPage(int selectedPageIndex)
     {
         if (_sinhvienCDService.Sinhvienservices != null)
@@ -168,5 +175,6 @@
         NavigationManager.NavigateTo("/sinhvien");
 
     }
+
     
 }
